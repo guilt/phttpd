@@ -1,0 +1,19 @@
+#!/bin/sh
+
+SERVER=127.0.0.1
+PREFIX=TESTDIR
+
+OPTS=
+
+echo Non-Pipelined, Single
+webbot $OPTS -redir -q -depth 1000 -single -nopipe -prefix http://$SERVER/$PREFIX http://$SERVER/$PREFIX
+
+sleep 5
+
+echo Non-Pipelined
+webbot $OPTS -redir -q -depth 1000 -nopipe -prefix http://$SERVER/$PREFIX http://$SERVER/$PREFIX
+
+sleep 5
+
+echo Pipelined
+webbot $OPTS -redir -q -depth 1000 -prefix http://$SERVER/$PREFIX http://$SERVER/$PREFIX

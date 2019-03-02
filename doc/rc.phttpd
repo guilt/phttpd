@@ -1,0 +1,70 @@
+#!/bin/sh
+#rc.phttpd: Pussy HTTPD script
+
+### BEGIN INIT INFO
+# Provides:          phttpd
+# Default-Start:     2 3 4 5 S
+# Default-Stop:      0 1 6 K
+# Short-Description: Pussy HTTPD
+# Description:       This represents the script to run the Pussy HTTP Daemon.
+#
+### END INIT INFO
+
+# REQUIRE: networking
+# REQUIRE: usr
+# PROVIDE: phttpd
+
+PHTTPD_EXEC=phttpd_s
+PHTTPD_BIN=/usr/sbin/$PHTTPD_EXEC
+
+# Start phttpd:
+phttpd_start() {
+  CMDLINE="$PHTTPD_BIN"
+  echo "Starting Pussy HTTPD:  $CMDLINE"
+  $CMDLINE
+}
+
+# Stop phttpd:
+phttpd_stop() {
+  echo "Stopping Pussy HTTPD..."
+  pkill -HUP $PHTTPD_EXEC 
+  echo ".. done"
+}
+
+# Restart phttpd:
+phttpd_restart() {
+  phttpd_stop
+  phttpd_start
+} 
+
+# Reload phttpd:
+phttpd_force_reload() {
+  phttpd_restart
+}
+
+#Driver
+
+#Check if exists
+if [ ! -x $PHTTPD_BIN ] ; then
+ echo "Error! Pussy HTTPD not found." 
+ exit 1
+fi
+
+#Execute
+case "$1" in
+'start')
+  phttpd_start
+  ;;
+'stop')
+  phttpd_stop
+  ;;
+'restart')
+  phttpd_restart
+  ;;
+'force-reload')
+  phttpd_force_reload
+  ;;
+*)
+  #Usage
+  echo "Usage: $0 start|stop|restart|force-reload"
+esac
