@@ -1,7 +1,9 @@
 #include <netlib.h>
 
 #include <errno.h>
-#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #ifdef WINDOWS
 #include <winsock2.h>
@@ -9,18 +11,15 @@
 #endif /* WINDOWS */
 
 #ifdef UNIX
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif /* UNIX */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-
 #ifdef FREEBSD_SENDFILE
-#include <sys/types.h>
 #include <sys/uio.h>
 #endif /* FREEBSD_SENDFILE */
 
@@ -28,7 +27,8 @@
 #define log_printf(...)                                     \
   printf("%s:%d:%s(): ", __FILE__, __LINE__, __FUNCTION__); \
   printf(__VA_ARGS__);                                      \
-  fflush(stdout)
+  printf("\n");                                             \
+  fflush(stdout);
 #else
 #define log_printf(...)
 #endif /* DEBUG */
@@ -39,11 +39,13 @@
 
 #define Read(f, b, c) recv(f, b, c, 0)
 #define Write(f, b, c) send(f, b, c, 0)
+#define CloseImpl(f) closesocket(f)
 #define FileRead read
 #define FileWrite write
 #else
 #define Read read
 #define Write write
+#define CloseImpl close
 #define FileRead read
 #define FileWrite write
 #endif /* WINDOWS */
@@ -57,207 +59,6 @@
 #ifndef max
 #define max(a, b) (a) > (b) ? (a) : (b)
 #endif /* min */
-
-int Initialize() {
-#ifdef WINDOWS
-  WSADATA wsaData;
-  WORD wVersionRequested = MAKEWORD(MIN_API, MAX_API);
-  if (WSAStartup(wVersionRequested, &wsaData) == 0) {
-    if (LOBYTE(wsaData.wVersion) == MIN_API &&
-        HIBYTE(wsaData.wVersion) == MAX_API) {
-      log_printf("WinSock Initialized: %d.%d\n", MIN_API, MAX_API);
-      return NET_OK;
-    }
-    WSACleanup();
-  }
-  return NET_ERROR;
-#endif /* WINDOWS */
-  log_printf("Sockets Initialized\n");
-  return NET_OK;
-}
-
-int32 Skipn(fd in, uint32 n) {
-  int32 ntotread = 0;
-  int32 nread; 
-  int8 c[READ_BUFF_SIZE];
-  while (ntotread < n) {
-    nread = Read(in, c, min(n - ntotread, READ_BUFF_SIZE));
-    if (nread <= 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-    ntotread += nread;
-  }
-  return ntotread;
-}
-
-int32 Relayn(file_fd in, fd out, uint32 n) {
-  int32 ntotread;
-  int32 nread;
-  int32 nwritten;
-  int8 c[READ_BUFF_SIZE];
-
-#ifdef FREEBSD_SENDFILE
-  if (n > 0) {
-    if (sendfile(in, out, 0, n, &ntotread, 0) < 0) {
-      if (errno != EINVAL)
-        return NET_ERROR;
-    } else
-      return ntotread;
-  } else if (n < 0) {
-    if (sendfile(in, out, 0, 0, &ntotread, 0) < 0) {
-      if (errno != EINVAL)
-        return NET_ERROR;
-    } else
-      return ntotread;
-  }
-#endif /* FREEBSD_SENDFILE */
-
-  ntotread = 0;
-  while (n < 0 || ntotread < n) {
-    nread = FileRead(
-        in, c, n < 0 ? READ_BUFF_SIZE : min(READ_BUFF_SIZE, n - ntotread));
-    if (nread <= 0) {
-      if (errno == EINTR)
-        continue;
-      if (n < 0)
-        return ntotread;
-      return NET_ERROR;
-    }
-    nwritten = Write(out, c, nread);
-    while (nwritten < nread) {
-      if (errno == EINTR) {
-        nwritten = Write(out, c, nread);
-        continue;
-      }
-      return NET_ERROR;
-    }
-    ntotread += nread;
-  }
-  return ntotread;
-}
-
-int32 Readn(fd in, void* buff, uint32 n) {
-  int32 ntotread = 0;
-  int32 nread;
-  int8* vbuff = buff;
-  while (ntotread < n) {
-    nread = recv(in, vbuff, n - ntotread, 0);
-    if (nread <= 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-    ntotread += nread;
-    vbuff += nread;
-  }
-  return ntotread;
-}
-
-int32 Writen(fd out, void* buff, uint32 n) {
-  int32 ntotwritten = 0;
-  int32 nwritten;
-  int8* vbuff = buff;
-  while (ntotwritten < n) {
-    nwritten = send(out, vbuff, n - ntotwritten, 0);
-    if (nwritten <= 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-    ntotwritten += nwritten;
-    vbuff += nwritten;
-  }
-  return ntotwritten;
-}
-
-int32 Readline(fd in, void* buff, uint32 maxsize) {
-  int32 nread = 0;
-  int32 ntotread = 0;
-  int8* cbuff = buff;
-  int8 c = 0;
-  maxsize -= sizeof(int8);
-  if (maxsize < 0)
-    return ntotread;
-  while (ntotread < maxsize) {
-    nread = Read(in, &c, sizeof(int8));
-    if (nread < 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-    if (nread < sizeof(int8)) {
-      ntotread += nread;
-      break;
-    }
-    if (!c || c == '\n' || c == '\r')
-      break;
-    *cbuff = c;
-    cbuff += nread;
-    ntotread += nread;
-  }
-  while (c && c != '\n' && c != '\r') {
-    nread = Read(in, &c, sizeof(int8));
-    if (nread < 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-  }
-#ifdef NET_CR
-  while (c && c != '\n') {
-    nread = Read(in, &c, sizeof(int8));
-    if (nread < 0) {
-      if (errno == EINTR)
-        continue;
-      return NET_ERROR;
-    }
-  }
-#endif /* NET_CR */
-  *(cbuff++) = 0;
-  return ntotread;
-}
-
-int32 Writeline(fd out, void* buff) {
-  int32 nwritten = 0;
-  int32 ntotwritten = 0;
-  int32 length = 0;
-#ifdef NET_CR
-  int8 pterm = '\r';
-#endif /* NET_CR */
-  int8 term = '\n';
-  int8* cbuff = buff;
-  for (; *cbuff && *cbuff != '\n' && *cbuff != '\r'; ++length, ++cbuff)
-    ;
-  nwritten = Writen(out, buff, length * sizeof(int8));
-  if (nwritten < length * sizeof(int8))
-    return NET_ERROR;
-  ntotwritten += nwritten;
-#ifdef NET_CR
-  nwritten = Writen(out, &pterm, sizeof(int8));
-  if (nwritten < sizeof(int8))
-    return NET_ERROR;
-  ntotwritten += nwritten;
-#endif /* NET_CR */
-  nwritten = Writen(out, &term, sizeof(int8));
-  if (nwritten < sizeof(int8))
-    return NET_ERROR;
-  ntotwritten += nwritten;
-  return ntotwritten;
-}
-
-int32 Socket(fd* in, int32 addrfamily, int32 socktype, int32 protocol) {
-  if ((*in = socket(addrfamily, socktype, protocol)) < 0)
-    return NET_ERROR;
-  return NET_OK;
-}
-
-int32 Close(fd* in) {
-  close(*in);
-  *in = -1;
-  return NET_OK;
-}
 
 static struct addrinfo* getAddrResults(char* ip,
                                        char* service,
@@ -307,12 +108,285 @@ static void getNameResults(char* ip,
   }
 }
 
+int32 Initialize() {
+#ifdef WINDOWS
+  WSADATA wsaData;
+  WORD wVersionRequested = MAKEWORD(MIN_API, MAX_API);
+  if (WSAStartup(wVersionRequested, &wsaData) == 0) {
+    if (LOBYTE(wsaData.wVersion) == MIN_API &&
+        HIBYTE(wsaData.wVersion) == MAX_API) {
+      log_printf("WinSock Initialized: %d.%d", MIN_API, MAX_API);
+      return NET_OK;
+    }
+    WSACleanup();
+  }
+  return NET_ERROR;
+#endif /* WINDOWS */
+  log_printf("Sockets Initialized");
+  return NET_OK;
+}
+
+int32 Readn(fd in, void* buff, uint32 n) {
+  int32 ntotread = 0;
+  int32 nread;
+  int8* vbuff = buff;
+  log_printf("%d %u", in, n);
+  while (ntotread < n) {
+    nread = recv(in, vbuff, n - ntotread, 0);
+    if (nread <= 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+    ntotread += nread;
+    vbuff += nread;
+  }
+  return ntotread;
+}
+
+int32 Skipn(fd in, uint32 n) {
+  int32 ntotread = 0;
+  int32 nread; 
+  int8 c[READ_BUFF_SIZE];
+  log_printf("%d %u", in, n);
+  while (ntotread < n) {
+    nread = Read(in, c, min(n - ntotread, READ_BUFF_SIZE));
+    if (nread <= 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+    ntotread += nread;
+  }
+  return ntotread;
+}
+
+int32 Writen(fd out, void* buff, uint32 n) {
+  int32 ntotwritten = 0;
+  int32 nwritten;
+  int8* vbuff = buff;
+  log_printf("%d %u", out, n);
+  while (ntotwritten < n) {
+    nwritten = send(out, vbuff, n - ntotwritten, 0);
+    if (nwritten <= 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+    ntotwritten += nwritten;
+    vbuff += nwritten;
+  }
+  return ntotwritten;
+}
+
+int32 Relayn(file_fd in, fd out, uint32 n) {
+  int32 ntotread;
+  int32 nread;
+  int32 nwritten;
+  int8 c[READ_BUFF_SIZE];
+  log_printf("%d %d %u", in, out, n);
+
+#ifdef FREEBSD_SENDFILE
+  if (n > 0) {
+    if (sendfile(in, out, 0, n, &ntotread, 0) < 0) {
+      if (errno != EINVAL)
+        return NET_ERROR;
+    } else
+      return ntotread;
+  } else if (n < 0) {
+    if (sendfile(in, out, 0, 0, &ntotread, 0) < 0) {
+      if (errno != EINVAL)
+        return NET_ERROR;
+    } else
+      return ntotread;
+  }
+#endif /* FREEBSD_SENDFILE */
+
+  ntotread = 0;
+  while (n < 0 || ntotread < n) {
+    nread = FileRead(
+        in, c, n < 0 ? READ_BUFF_SIZE : min(READ_BUFF_SIZE, n - ntotread));
+    if (nread <= 0) {
+      if (errno == EINTR)
+        continue;
+      if (n < 0)
+        return ntotread;
+      return NET_ERROR;
+    }
+    nwritten = Write(out, c, nread);
+    while (nwritten < nread) {
+      if (errno == EINTR) {
+        nwritten = Write(out, c, nread);
+        continue;
+      }
+      return NET_ERROR;
+    }
+    ntotread += nread;
+  }
+  return ntotread;
+}
+
+int32 Readline(fd in, void* buff, uint32 maxsize) {
+  int32 nread = 0;
+  int32 ntotread = 0;
+  int8* cbuff = buff;
+  int8 c = 0;
+  log_printf("%d %u", in, maxsize);
+  maxsize -= sizeof(int8);
+  if (maxsize < 0)
+    return ntotread;
+  //This is slow, and has heavy Syscall bottleneck.
+  //What we really need is a buffer where we can ungetc from.
+  while (ntotread < maxsize) {
+    nread = Read(in, &c, sizeof(int8));
+    if (nread < 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+    if (nread < sizeof(int8)) {
+      ntotread += nread;
+      break;
+    }
+    if (!c || c == '\n' || c == '\r')
+      break;
+    *cbuff = c;
+    cbuff += nread;
+    ntotread += nread;
+  }
+  while (c && c != '\n' && c != '\r') {
+    nread = Read(in, &c, sizeof(int8));
+    if (nread < 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+  }
+#ifdef NET_CR
+  while (c && c != '\n') {
+    nread = Read(in, &c, sizeof(int8));
+    if (nread < 0) {
+      if (errno == EINTR)
+        continue;
+      return NET_ERROR;
+    }
+  }
+#endif /* NET_CR */
+  *(cbuff++) = 0;
+  return ntotread;
+}
+
+int32 Writeline(fd out, void* buff) {
+  int32 nwritten = 0;
+  int32 ntotwritten = 0;
+  int32 length = 0;
+#ifdef NET_CR
+  int8 pterm = '\r';
+#endif /* NET_CR */
+  int8 term = '\n';
+  int8* cbuff = buff;
+  log_printf("%d", out);
+  for (; *cbuff && *cbuff != '\n' && *cbuff != '\r'; ++length, ++cbuff)
+    ;
+  nwritten = Writen(out, buff, length * sizeof(int8));
+  if (nwritten < length * sizeof(int8))
+    return NET_ERROR;
+  ntotwritten += nwritten;
+#ifdef NET_CR
+  nwritten = Writen(out, &pterm, sizeof(int8));
+  if (nwritten < sizeof(int8))
+    return NET_ERROR;
+  ntotwritten += nwritten;
+#endif /* NET_CR */
+  nwritten = Writen(out, &term, sizeof(int8));
+  if (nwritten < sizeof(int8))
+    return NET_ERROR;
+  ntotwritten += nwritten;
+  return ntotwritten;
+}
+
+int32 RecvFrom(fd in, void* buff, uint32 maxsize, char* ip, char* service) {
+  int32 nread = 0;
+  struct sockaddr caddr;
+  uint32 caddrs = 0;
+
+  log_printf("%d %u", in, maxsize);
+  nread = recvfrom(in, buff, maxsize, 0, (struct sockaddr*)&caddr, &caddrs);
+  if (nread < 0)
+    return NET_ERROR;
+
+  getNameResults(ip, service, &caddr, caddrs);
+  return nread;
+}
+
+int32 SendTo(fd out, void* buff, uint32 maxsize, char* ip, char* service) {
+  int32 nwritten = 0;
+  struct addrinfo *results, *rp;
+
+  log_printf("%d %u", out, maxsize);
+  results = getAddrResults(ip, service, 0, SOCK_DGRAM, IPPROTO_UDP);
+  if (results == NULL)
+    return NET_ERROR;
+
+  for (rp = results; rp; rp = rp->ai_next) {
+    nwritten = sendto(out, buff, maxsize, 0, rp->ai_addr, rp->ai_addrlen);
+    if (nwritten >= 0)
+      break;
+  }
+
+  freeAddrResults(results);
+  results = NULL;
+
+  if (rp == NULL)
+    return NET_ERROR;
+
+  if (nwritten < 0)
+    return NET_ERROR;
+
+  return nwritten;
+}
+
+int32 Socket(fd* in, int32 addrfamily, int32 socktype, int32 protocol) {
+  log_printf("%d %d %d", addrfamily, socktype, protocol);
+  if ((*in = socket(addrfamily, socktype, protocol)) < 0)
+    return NET_ERROR;
+  return NET_OK;
+}
+
+int32 Close(fd* in) {
+  log_printf("%d", *in);
+  if(*in < 0)
+    return NET_ERROR;
+  CloseImpl(*in);
+  *in = -1;
+  return NET_OK;
+}
+
+
+int32 Accept(fd* bindin, fd* acceptin, char* ip, char* service) {
+  struct sockaddr caddr;
+  uint32 caddrs = sizeof(caddr);
+  log_printf("%d", *bindin);
+
+  if (*bindin < 0) {
+    return NET_ERROR;
+  }
+  *acceptin = accept(*bindin, (struct sockaddr*)&caddr, &caddrs);
+  if (*acceptin < 0) {
+    return NET_ERROR;
+  }
+
+  getNameResults(ip, service, &caddr, caddrs);
+  return NET_OK;
+}
+
 static int32 ConnectImpl(fd* in,
                          char* ip,
                          char* service,
                          int32 socktype,
                          int32 protocol) {
   struct addrinfo *results, *rp;
+  log_printf("%d %s %s %d %d", *in, ip, service, socktype, protocol);
 
   results = getAddrResults(ip, service, 0, socktype, protocol);
   if (results == NULL)
@@ -345,6 +419,7 @@ static int32 BindImpl(fd* bindin,
                       int32 socktype,
                       int32 protocol) {
   struct addrinfo *results, *rp;
+  log_printf("%d %s %s %d %d", *bindin, ip, service, socktype, protocol);
 
   results = getAddrResults(ip, service, AI_PASSIVE, socktype, protocol);
   if (results == NULL)
@@ -392,56 +467,4 @@ int32 ConnectUDP(fd* in, char* ip, char* service) {
 
 int32 BindUDP(fd* bindin, char* ip, char* service) {
   return BindImpl(bindin, ip, service, SOCK_DGRAM, IPPROTO_UDP);
-}
-
-int32 Accept(fd* bindin, fd* acceptin, char* ip, char* service) {
-  struct sockaddr caddr;
-  uint32 caddrs = sizeof(caddr);
-
-  *acceptin = accept(*bindin, (struct sockaddr*)&caddr, &caddrs);
-  if (*acceptin < 0) {
-    return NET_ERROR;
-  }
-
-  getNameResults(ip, service, &caddr, caddrs);
-  return NET_OK;
-}
-
-int32 RecvFrom(fd in, void* buff, uint32 maxsize, char* ip, char* service) {
-  int32 nread = 0;
-  struct sockaddr caddr;
-  uint32 caddrs = 0;
-
-  nread = recvfrom(in, buff, maxsize, 0, (struct sockaddr*)&caddr, &caddrs);
-  if (nread < 0)
-    return NET_ERROR;
-
-  getNameResults(ip, service, &caddr, caddrs);
-  return nread;
-}
-
-int32 SendTo(fd out, void* buff, uint32 maxsize, char* ip, char* service) {
-  int32 nwritten = 0;
-  struct addrinfo *results, *rp;
-
-  results = getAddrResults(ip, service, 0, SOCK_DGRAM, IPPROTO_UDP);
-  if (results == NULL)
-    return NET_ERROR;
-
-  for (rp = results; rp; rp = rp->ai_next) {
-    nwritten = sendto(out, buff, maxsize, 0, rp->ai_addr, rp->ai_addrlen);
-    if (nwritten >= 0)
-      break;
-  }
-
-  freeAddrResults(results);
-  results = NULL;
-
-  if (rp == NULL)
-    return NET_ERROR;
-
-  if (nwritten < 0)
-    return NET_ERROR;
-
-  return nwritten;
 }

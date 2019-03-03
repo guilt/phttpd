@@ -8,7 +8,7 @@ ifdef DEBUG
 endif
 
 ifeq ($(OS),Windows_NT)
-	CFLAGS += -DWINDOWS -I ../netlibmini/include
+	CFLAGS += -DWINDOWS -I ../netlibmini/include -I include/windows
 	LDFLAGS += -lnetlib -lws2_32 -L ../netlibmini
 	EXE := .exe
 else

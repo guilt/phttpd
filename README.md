@@ -23,9 +23,9 @@ $ make -C phttpd
 ```
 
 That's it. Now to launch the server, execute phttpd_s. If you are
-running on a privileged port, you may need to run as root.
+running on a privileged port, you will need to run as root.
 
-`# ./phttpd_s`
+`$ cd phttpd && ./phttpd_s`
 
 A sample rc.phttpd is provided for those who wish to run the server
 at init / startup.
@@ -80,6 +80,13 @@ vhosts/
                 index.html          Homepage of sam.com 
                 favicon.ico         sam.com's site icon
 ```
+
+Additional Code
+---------------
+
+Many thanks to the following authors and projects:
+
+* Toni Ronkko - Dirent for Visual C++ - https://github.com/tronkko/dirent
 
 Limitations
 -----------

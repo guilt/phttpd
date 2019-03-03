@@ -1,5 +1,7 @@
-*.o
 *.layout
+*.o
 *.out
 *.a
+*.lib
 *.exe
+phttpd_*

@@ -1,25 +1,29 @@
 #include <netlib.h>
 
-#include <unistd.h>
 #include <ctype.h>
-#include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <time.h>
 
 #ifdef UNIX
-#include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif /* UNIX */
 
-#include <time.h>
+#ifdef WINDOWS
+#define strcasecmp stricmp
+#endif /* WINDOWS */
 
 #ifdef DEBUG
 #define log_printf(...)                                     \
   printf("%s:%d:%s(): ", __FILE__, __LINE__, __FUNCTION__); \
   printf(__VA_ARGS__);                                      \
+  printf("\n");                                             \
   fflush(stdout)
 #else
 #define log_printf(...)
@@ -64,7 +68,6 @@
 #define HTTP_PUT 6
 #define HTTP_TRACE 7
 
-static int serving;
 static fd in;
 
 void parse_request(char buff[LINE_SIZE], int *http_method, char url[LINE_SIZE],
@@ -425,7 +428,7 @@ void serve_request(fd *out, char url[LINE_SIZE],
 #else
   map_url(url, filename, &send_redir);
 #endif /* VHOST */
-  log_printf("URL: %s -> File: %s\n", url, filename);
+  log_printf("URL: %s -> File: %s", url, filename);
 
   if (send_redir) {
     serve_redirect(out, url, http_version);
@@ -474,12 +477,12 @@ void serve_request(fd *out, char url[LINE_SIZE],
       Writeline(*out, "HTTP/1.1 200 OK");
     Writeline(*out, "Connection: keep-alive");
   }
-  log_printf("Start: %d End: %d\n", start, end);
-  log_printf("Content-Length: %d\n", clen);
+  log_printf("Start: %d End: %d", start, end);
+  log_printf("Content-Length: %d", clen);
   snprintf(buff, LINE_SIZE, "Content-Length: %d", clen);
   Writeline(*out, buff);
   if (partial) {
-    log_printf("Content-Range: bytes %d-%d/%d\n", start, end, flen);
+    log_printf("Content-Range: bytes %d-%d/%d", start, end, flen);
     snprintf(buff, LINE_SIZE, "Content-Range: bytes %d-%d/%d", start, end,
              flen);
     Writeline(*out, buff);
@@ -487,7 +490,7 @@ void serve_request(fd *out, char url[LINE_SIZE],
   }
   {
     char *ctype = get_content_type(filename);
-    log_printf("Content-Type: %s\n", ctype);
+    log_printf("Content-Type: %s", ctype);
     snprintf(buff, LINE_SIZE, "Content-Type: %s", ctype);
   }
   Writeline(*out, buff);
@@ -526,7 +529,7 @@ int handle_me(fd *accept) {
 
     while (*buff) {
       parse_header(buff, header, value);
-      log_printf("[%s]: %s\n", header, value);
+      log_printf("[%s]: %s", header, value);
 
       if (!strcmp(header, "Connection"))
         if (!strcmp(value, "close"))
@@ -564,19 +567,15 @@ int handle_me(fd *accept) {
       serve_request(accept, url, start, end, http_version, 1);
 #endif /* VHOST */
     }
-  } while (persist_done && serving > 0);
+  } while (persist_done);
 
   return NET_OK;
 }
 
 void interrupt_handler(int sig) {
-  log_printf("Quitting\n");
-  if (serving > 0)
-    serving = -1;
-  else {
-    Close(&in);
-    exit(0);
-  }
+  log_printf("Interrupted ...");
+  Close(&in);
+  log_printf("Bind Closed.");
 }
 
 int main() {
@@ -587,7 +586,7 @@ int main() {
 #endif /* FORKED */
 
   if (Initialize() != NET_OK) {
-    log_printf("Initialization Error\n");
+    log_printf("Initialization Error");
     return -1;
   }
 
@@ -595,7 +594,7 @@ int main() {
 #ifndef DEBUG
   pid = fork();
   if (pid < 0) {
-    log_printf("Fork Error\n");
+    log_printf("Fork Error");
     return -1;
   }
   if (!pid) {
@@ -630,32 +629,30 @@ int main() {
     snprintf(buff, LINE_SIZE, "%u", SERV_PORT);
 
     if (Bind(&in, SERV_IP, buff) < 0) {
-      log_printf("Bind Error\n");
+      log_printf("Bind Error");
       return -1;
     }
   }
 
-  serving = 0;
-  while (serving >= 0) {
+  while(in >= 0) {
     char host[MISC_SIZE], service[MISC_SIZE];
+    log_printf("Accept ...");
     if (Accept(&in, &accept, host, service) < 0) {
-      log_printf("Accept Error\n");
+      log_printf("Accept Error.");
       continue;
     }
-    log_printf("Accepted: %s:%s\n", host, service);
+    log_printf("Accepted: %s:%s", host, service);
 #ifdef FORKED
     pid = fork();
     if (pid < 0) {
-      printf("Fork Error\n");
+      printf("Fork Error");
       Close(&accept);
       continue;
     }
     if (!pid) {
       Close(&in);
-      log_printf("Child: %d\n", getpid());
-      serving = 1;
+      log_printf("Child: %d", getpid());
       status = handle_me(&accept);
-      if (serving > 0) serving = 0;
       Close(&accept);
       return status;
     } else {
@@ -663,9 +660,7 @@ int main() {
       waitpid(pid, &status, WNOHANG);
     }
 #else
-    serving = 1;
     handle_me(&accept);
-    if (serving > 0) serving = 0;
     Close(&accept);
 #endif /* FORKED */
   }
