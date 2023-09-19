@@ -1,7 +1,9 @@
 CC := gcc
 RM := rm -f
-CFLAGS += -O2 -Wall
+CFLAGS += -O2 -Wall $(DISTCFLAGS)
 CFLAGS += -DSERV_PORT=8080
+VHOST_BASE_DIR ?= "./vhosts"
+BASE_DIR ?= "./htdocs"
 
 ifdef DEBUG
 	CFLAGS += -DDEBUG
@@ -21,6 +23,8 @@ else
 	EXE =
 endif
 
+CFLAGS += -D_FILE_OFFSET_BITS=64
+
 BIN = phttpd_s$(EXE)
 VBIN = phttpd_v$(EXE)
 
@@ -32,7 +36,7 @@ clean:
 	$(RM) $(TARGETS)
 
 $(VBIN): src/server.c
-	$(CC) -o $@ -s $< -DBASE_DIR=\"./vhosts\" -DVHOST $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ -s $< -DBASE_DIR=\"$(VHOST_BASE_DIR)\" -DVHOST $(CFLAGS) $(LDFLAGS)
 
 $(BIN): src/server.c
-	$(CC) -o $@ -s $< -DBASE_DIR=\"./htdocs\" $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ -s $< -DBASE_DIR=\"$(BASE_DIR)\" $(CFLAGS) $(LDFLAGS)

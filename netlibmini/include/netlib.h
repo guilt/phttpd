@@ -6,9 +6,6 @@
 
 #define NET_BACKLOG 16
 
-typedef int file_fd;
-typedef int fd;
-
 typedef int int32;
 typedef long long int64;
 typedef short int16;
@@ -18,18 +15,22 @@ typedef unsigned long long uint64;
 typedef unsigned short uint16;
 typedef unsigned char uint8;
 
+typedef int file_fd;
+typedef int fd;
+typedef int64 intlen;
+
 int32 Initialize();
 
-int32 Readn(fd in, void *buf, uint32 n);
-int32 Skipn(fd in, uint32 n);
-int32 Writen(fd out, void *buf, uint32 n);
-int32 Relayn(file_fd in, fd out, uint32 n);
+intlen Readn(fd in, void *buf, intlen n);
+intlen Skipn(fd in, intlen n);
+intlen Writen(fd out, void *buf, intlen n);
+intlen Relayn(file_fd in, fd out, intlen n);
 
-int32 Readline(fd in, void *buf, uint32 n);
-int32 Writeline(fd in, void *buf);
+intlen Readline(fd in, void *buf, intlen maxsize);
+intlen Writeline(fd in, void *buf);
 
-int32 RecvFrom(fd in, void *buf , uint32 maxsize, char *ip, char *service);
-int32 SendTo(fd in, void *buf, uint32 maxsize, char *ip, char *service);
+intlen RecvFrom(fd in, void *buf , intlen maxsize, char *ip, char *service);
+intlen SendTo(fd in, void *buf, intlen maxsize, char *ip, char *service);
 
 int32 Socket(fd *in, int32 addrfamily, int32 socktype, int32 protocol);
 int32 Close(fd *in);

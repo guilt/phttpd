@@ -2,7 +2,7 @@ CC := gcc
 AR := ar
 RM := rm -f
 MKDIR := mkdir -p
-CFLAGS += -O2 -Wall
+CFLAGS += -O2 -Wall $(DISTCFLAGS)
 
 ifdef DEBUG
 	CFLAGS += -DDEBUG
@@ -13,6 +13,8 @@ ifeq ($(OS),Windows_NT)
 else
 	CFLAGS += -DUNIX
 endif
+
+CFLAGS += -D_FILE_OFFSET_BITS=64
 
 OBJECTS=obj/netlib.o
 TARGETS=libnetlib.a

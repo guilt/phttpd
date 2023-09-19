@@ -20,13 +20,13 @@
 #endif /* WINDOWS */
 
 #ifdef DEBUG
-#define log_printf(...)                                     \
+#define logPrintf(...)                                     \
   printf("%s:%d:%s(): ", __FILE__, __LINE__, __FUNCTION__); \
   printf(__VA_ARGS__);                                      \
   printf("\n");                                             \
   fflush(stdout)
 #else
-#define log_printf(...)
+#define logPrintf(...)
 #endif /* DEBUG */
 
 #ifndef SERV_IP
@@ -70,7 +70,7 @@
 
 static fd in;
 
-void parse_request(char buff[LINE_SIZE], int *http_method, char url[LINE_SIZE],
+static void parseRequest(char buff[LINE_SIZE], int *http_method, char url[LINE_SIZE],
                    int *http_version) {
   int i = 0, j = 0;
   if (!buff || !http_method || !url || !http_version) return;
@@ -120,7 +120,7 @@ void parse_request(char buff[LINE_SIZE], int *http_method, char url[LINE_SIZE],
   }
 }
 
-void parse_header(char buff[LINE_SIZE], char header[LINE_SIZE],
+static void parseHeader(char buff[LINE_SIZE], char header[LINE_SIZE],
                   char value[LINE_SIZE]) {
   int i = 0, j = 0, k = 0;
   if (!buff || !header || !value) return;
@@ -143,7 +143,7 @@ void parse_header(char buff[LINE_SIZE], char header[LINE_SIZE],
   value[k] = 0;
 }
 
-char *get_content_type(char file[LINE_SIZE]) {
+static char *getContentType(char file[LINE_SIZE]) {
   int index = -1;
   int i = 0;
 #define FILE_TYPES 40
@@ -203,7 +203,7 @@ char *get_content_type(char file[LINE_SIZE]) {
   return "content/unknown";
 }
 
-void get_range_values(char value[LINE_SIZE], int *start, int *end) {
+static void getRangeValues(char value[LINE_SIZE], intlen *start, intlen *end) {
   char *vptr = value;
   *start = -1;
   *end = -1;
@@ -211,16 +211,16 @@ void get_range_values(char value[LINE_SIZE], int *start, int *end) {
   vptr += 5;
   if (!isdigit(*vptr)) ++vptr;
   if (!*vptr) return;
-  if (!sscanf(vptr, "%d", start)) return;
+  if (!sscanf(vptr, "%lld", start)) return;
   for (; *vptr && *vptr != '-'; ++vptr)
     ;
   if (!*vptr) return;
   ++vptr;
   if (!*vptr) return;
-  sscanf(vptr, "%d", end);
+  sscanf(vptr, "%lld", end);
 }
 
-void map_url(char url[LINE_SIZE],
+static void mapURL(char url[LINE_SIZE],
 #ifdef VHOST
              char vhost[LINE_SIZE],
 #endif /* VHOST */
@@ -374,19 +374,19 @@ void map_url(char url[LINE_SIZE],
   }
 }
 
-void serve_invalid_version(fd *out) {
+static void serveInvalidVersion(fd *out) {
   Writeline(*out, "HTTP/1.0 505 HTTP Version Not Supported");
   Writeline(*out, "Connection: close");
   Writeline(*out, "");
 }
 
-void serve_invalid_method(fd *out) {
+static void serveInvalidMethod(fd *out) {
   Writeline(*out, "HTTP/1.0 405 Method Not Allowed");
   Writeline(*out, "Connection: close");
   Writeline(*out, "");
 }
 
-void serve_redirect(fd *out, char url[LINE_SIZE], int http_version) {
+static void serveRedirect(fd *out, char url[LINE_SIZE], int http_version) {
   char buff[LINE_SIZE];
   snprintf(buff, LINE_SIZE, "Location: %s", url);
   if (http_version == HTTP_VERSION_1_0) {
@@ -400,7 +400,7 @@ void serve_redirect(fd *out, char url[LINE_SIZE], int http_version) {
   Writeline(*out, "");
 }
 
-void serve_not_found(fd *out, int http_version) {
+static void serveNotFound(fd *out, int http_version) {
   if (http_version == HTTP_VERSION_1_0) {
     Writeline(*out, "HTTP/1.0 404 Not Found");
     Writeline(*out, "Connection: close");
@@ -411,27 +411,27 @@ void serve_not_found(fd *out, int http_version) {
   Writeline(*out, "");
 }
 
-void serve_request(fd *out, char url[LINE_SIZE],
+static void serveRequest(fd *out, char url[LINE_SIZE],
 #ifdef VHOST
                    char vhost[LINE_SIZE],
 #endif /* VHOST */
-                   int start, int end, int http_version, int head_only) {
+                   intlen start, intlen end, int http_version, int head_only) {
   int send_redir = 0;
   char filename[LINE_SIZE];
   char buff[LINE_SIZE];
   file_fd furl = -1;
-  int flen = -1, clen = -1;
-  int partial = 0;
+  intlen flen = -1, clen = -1;
+  int partial = 0, partial_unsatisfiable = 0;
 
 #ifdef VHOST
-  map_url(url, vhost, filename, &send_redir);
+  mapURL(url, vhost, filename, &send_redir);
 #else
-  map_url(url, filename, &send_redir);
+  mapURL(url, filename, &send_redir);
 #endif /* VHOST */
-  log_printf("URL: %s -> File: %s", url, filename);
+  logPrintf("URL: %s -> File: %s", url, filename);
 
   if (send_redir) {
-    serve_redirect(out, url, http_version);
+    serveRedirect(out, url, http_version);
     return;
   }
 
@@ -441,59 +441,89 @@ void serve_request(fd *out, char url[LINE_SIZE],
   furl = open(filename, O_RDONLY);
 #endif /* WINDOWS */
   if (furl < 0) {
-    serve_not_found(out, http_version);
+    serveNotFound(out, http_version);
     return;
   }
 
-  flen = (uint32)lseek(furl, 0, SEEK_END);
+  flen = lseek(furl, 0, SEEK_END);
   lseek(furl, 0, SEEK_SET);
   clen = flen;
+
+  logPrintf("Start: %lld End: %lld", start, end);
   if (start >= 0) {
-    if (start >= flen) start = flen - 1;
-    if (end >= start && end < flen) {
-    } else {
+    partial = 1;
+
+    if (start >= flen) {
+      partial_unsatisfiable = 1;
+    } else if (end < 0) {
       end = flen - 1;
+    } else if (end >= start && end < flen) {
     }
-    lseek(furl, start, SEEK_SET);
-    ++partial;
-    clen = (end - start + 1);
+
+    if(!partial_unsatisfiable) {
+      lseek(furl, start, SEEK_SET);
+      clen = (end - start + 1);
+    }
   } else if (end >= 0) {
+    partial = 1;
+
     start = flen - end;
     end = flen - 1;
+
     lseek(furl, start, SEEK_SET);
-    ++partial;
     clen = (end - start + 1);
   }
+
+  if(partial_unsatisfiable) {
+      logPrintf("Unsatifiable, Length: %lld", flen);
+      Writeline(*out, "HTTP/1.0 416 Range not Satisfiable");
+      Writeline(*out, "Connection: close");
+      Writeline(*out, "");
+      Close(&furl);
+
+      return;
+  }
+
+  if(partial) {
+      if (http_version == HTTP_VERSION_1_0) {
+        Writeline(*out, "HTTP/1.0 206 Partial Content");
+      } else if (http_version == HTTP_VERSION_1_1) {
+        Writeline(*out, "HTTP/1.1 206 Partial Content");
+      }
+  } else {
+      if (http_version == HTTP_VERSION_1_0) {
+        Writeline(*out, "HTTP/1.0 200 OK");
+      } else if (http_version == HTTP_VERSION_1_1) {
+        Writeline(*out, "HTTP/1.1 200 OK");
+      }
+  }
+
   if (http_version == HTTP_VERSION_1_0) {
-    if (partial)
-      Writeline(*out, "HTTP/1.0 206 Partial Content");
-    else
-      Writeline(*out, "HTTP/1.0 200 OK");
     Writeline(*out, "Connection: close");
   } else if (http_version == HTTP_VERSION_1_1) {
-    if (partial)
-      Writeline(*out, "HTTP/1.1 206 Partial Content");
-    else
-      Writeline(*out, "HTTP/1.1 200 OK");
     Writeline(*out, "Connection: keep-alive");
   }
-  log_printf("Start: %d End: %d", start, end);
-  log_printf("Content-Length: %d", clen);
-  snprintf(buff, LINE_SIZE, "Content-Length: %d", clen);
+
+  {
+  logPrintf("Content-Length: %lld", clen);
+  snprintf(buff, LINE_SIZE, "Content-Length: %lld", clen);
   Writeline(*out, buff);
+  }
+
   if (partial) {
-    log_printf("Content-Range: bytes %d-%d/%d", start, end, flen);
-    snprintf(buff, LINE_SIZE, "Content-Range: bytes %d-%d/%d", start, end,
+    logPrintf("Content-Range: bytes %lld-%lld/%lld", start, end, flen);
+    snprintf(buff, LINE_SIZE, "Content-Range: bytes %lld-%lld/%lld", start, end,
              flen);
     Writeline(*out, buff);
     Writeline(*out, "Accept-Ranges: bytes");
   }
+
   {
-    char *ctype = get_content_type(filename);
-    log_printf("Content-Type: %s", ctype);
+    char *ctype = getContentType(filename);
+    logPrintf("Content-Type: %s", ctype);
     snprintf(buff, LINE_SIZE, "Content-Type: %s", ctype);
+    Writeline(*out, buff);
   }
-  Writeline(*out, buff);
 
   Writeline(*out, "Cache-Control: no-cache");
   Writeline(*out, "");
@@ -503,14 +533,14 @@ void serve_request(fd *out, char url[LINE_SIZE],
   Close(&furl);
 }
 
-int handle_me(fd *accept) {
+static int handleMe(fd *accept) {
   int persist_done;
   char buff[LINE_SIZE], url[LINE_SIZE], header[LINE_SIZE], value[LINE_SIZE];
 #ifdef VHOST
   char vhost[LINE_SIZE];
 #endif /* VHOST */
   int http_method, http_version;
-  int start = -1, end = -1;
+  intlen start = -1, end = -1;
 
   do {
     persist_done = 1;
@@ -522,20 +552,20 @@ int handle_me(fd *accept) {
     Readline(*accept, buff, LINE_SIZE);
 
     if (!*buff) return NET_ERROR;
-    parse_request(buff, &http_method, url, &http_version);
+    parseRequest(buff, &http_method, url, &http_version);
 
     *buff = 0;
     Readline(*accept, buff, LINE_SIZE);
 
     while (*buff) {
-      parse_header(buff, header, value);
-      log_printf("[%s]: %s", header, value);
+      parseHeader(buff, header, value);
+      logPrintf("[%s]: %s", header, value);
 
       if (!strcmp(header, "Connection"))
         if (!strcmp(value, "close"))
           http_version = HTTP_VERSION_1_0; /* Force compatibility. */
 
-      if (!strcmp(header, "Range")) get_range_values(value, &start, &end);
+      if (!strcmp(header, "Range")) getRangeValues(value, &start, &end);
 
 #ifdef VHOST
       if (!strcmp(header, "Host"))
@@ -549,22 +579,22 @@ int handle_me(fd *accept) {
     if (http_version == HTTP_VERSION_1_0) persist_done = 0;
 
     if (http_method == HTTP_INVALID) {
-      serve_invalid_method(accept);
+      serveInvalidMethod(accept);
       persist_done = 0;
     } else if (http_version == HTTP_VERSION_INVALID) {
-      serve_invalid_version(accept);
+      serveInvalidVersion(accept);
       persist_done = 0;
     } else if (http_method == HTTP_GET) {
 #ifdef VHOST
-      serve_request(accept, url, vhost, start, end, http_version, 0);
+      serveRequest(accept, url, vhost, start, end, http_version, 0);
 #else
-      serve_request(accept, url, start, end, http_version, 0);
+      serveRequest(accept, url, start, end, http_version, 0);
 #endif /* VHOST */
     } else if (http_method == HTTP_HEAD) {
 #ifdef VHOST
-      serve_request(accept, url, vhost, start, end, http_version, 1);
+      serveRequest(accept, url, vhost, start, end, http_version, 1);
 #else
-      serve_request(accept, url, start, end, http_version, 1);
+      serveRequest(accept, url, start, end, http_version, 1);
 #endif /* VHOST */
     }
   } while (persist_done);
@@ -573,9 +603,9 @@ int handle_me(fd *accept) {
 }
 
 void interrupt_handler(int sig) {
-  log_printf("Interrupted ...");
+  logPrintf("Interrupted ...");
   Close(&in);
-  log_printf("Bind Closed.");
+  logPrintf("Bind Closed.");
 }
 
 int main() {
@@ -586,7 +616,7 @@ int main() {
 #endif /* FORKED */
 
   if (Initialize() != NET_OK) {
-    log_printf("Initialization Error");
+    logPrintf("Initialization Error");
     return -1;
   }
 
@@ -594,7 +624,7 @@ int main() {
 #ifndef DEBUG
   pid = fork();
   if (pid < 0) {
-    log_printf("Fork Error");
+    logPrintf("Fork Error");
     return -1;
   }
   if (!pid) {
@@ -629,30 +659,30 @@ int main() {
     snprintf(buff, LINE_SIZE, "%u", SERV_PORT);
 
     if (Bind(&in, SERV_IP, buff) < 0) {
-      log_printf("Bind Error");
+      logPrintf("Bind Error");
       return -1;
     }
   }
 
   while(in >= 0) {
     char host[MISC_SIZE], service[MISC_SIZE];
-    log_printf("Accept ...");
+    logPrintf("Accept ...");
     if (Accept(&in, &accept, host, service) < 0) {
-      log_printf("Accept Error.");
+      logPrintf("Accept Error.");
       continue;
     }
-    log_printf("Accepted: %s:%s", host, service);
+    logPrintf("Accepted: %s:%s", host, service);
 #ifdef FORKED
     pid = fork();
     if (pid < 0) {
-      printf("Fork Error");
+      logPrintf("Fork Error");
       Close(&accept);
       continue;
     }
     if (!pid) {
       Close(&in);
-      log_printf("Child: %d", getpid());
-      status = handle_me(&accept);
+      logPrintf("Child: %d", getpid());
+      status = handleMe(&accept);
       Close(&accept);
       return status;
     } else {
@@ -660,7 +690,7 @@ int main() {
       waitpid(pid, &status, WNOHANG);
     }
 #else
-    handle_me(&accept);
+    handleMe(&accept);
     Close(&accept);
 #endif /* FORKED */
   }

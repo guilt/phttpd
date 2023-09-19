@@ -24,13 +24,13 @@
 #endif /* FREEBSD_SENDFILE */
 
 #ifdef DEBUG
-#define log_printf(...)                                     \
+#define logPrintf(...)                                     \
   printf("%s:%d:%s(): ", __FILE__, __LINE__, __FUNCTION__); \
   printf(__VA_ARGS__);                                      \
   printf("\n");                                             \
   fflush(stdout);
 #else
-#define log_printf(...)
+#define logPrintf(...)
 #endif /* DEBUG */
 
 #ifdef WINDOWS
@@ -115,22 +115,22 @@ int32 Initialize() {
   if (WSAStartup(wVersionRequested, &wsaData) == 0) {
     if (LOBYTE(wsaData.wVersion) == MIN_API &&
         HIBYTE(wsaData.wVersion) == MAX_API) {
-      log_printf("WinSock Initialized: %d.%d", MIN_API, MAX_API);
+      logPrintf("WinSock Initialized: %d.%d", MIN_API, MAX_API);
       return NET_OK;
     }
     WSACleanup();
   }
   return NET_ERROR;
 #endif /* WINDOWS */
-  log_printf("Sockets Initialized");
+  logPrintf("Sockets Initialized");
   return NET_OK;
 }
 
-int32 Readn(fd in, void* buff, uint32 n) {
-  int32 ntotread = 0;
-  int32 nread;
+intlen Readn(fd in, void* buff, intlen n) {
+  intlen ntotread = 0;
+  intlen nread;
   int8* vbuff = buff;
-  log_printf("%d %u", in, n);
+  logPrintf("%d %lld", in, n);
   while (ntotread < n) {
     nread = recv(in, vbuff, n - ntotread, 0);
     if (nread <= 0) {
@@ -144,11 +144,11 @@ int32 Readn(fd in, void* buff, uint32 n) {
   return ntotread;
 }
 
-int32 Skipn(fd in, uint32 n) {
-  int32 ntotread = 0;
-  int32 nread; 
+intlen Skipn(fd in, intlen n) {
+  intlen ntotread = 0;
+  intlen nread;
   int8 c[READ_BUFF_SIZE];
-  log_printf("%d %u", in, n);
+  logPrintf("%d %lld", in, n);
   while (ntotread < n) {
     nread = Read(in, c, min(n - ntotread, READ_BUFF_SIZE));
     if (nread <= 0) {
@@ -161,11 +161,11 @@ int32 Skipn(fd in, uint32 n) {
   return ntotread;
 }
 
-int32 Writen(fd out, void* buff, uint32 n) {
-  int32 ntotwritten = 0;
-  int32 nwritten;
+intlen Writen(fd out, void* buff, intlen n) {
+  intlen ntotwritten = 0;
+  intlen nwritten;
   int8* vbuff = buff;
-  log_printf("%d %u", out, n);
+  logPrintf("%d %lld", out, n);
   while (ntotwritten < n) {
     nwritten = send(out, vbuff, n - ntotwritten, 0);
     if (nwritten <= 0) {
@@ -179,12 +179,12 @@ int32 Writen(fd out, void* buff, uint32 n) {
   return ntotwritten;
 }
 
-int32 Relayn(file_fd in, fd out, uint32 n) {
-  int32 ntotread;
-  int32 nread;
-  int32 nwritten;
+intlen Relayn(file_fd in, fd out, intlen n) {
+  intlen ntotread;
+  intlen nread;
+  intlen nwritten;
   int8 c[READ_BUFF_SIZE];
-  log_printf("%d %d %u", in, out, n);
+  logPrintf("%d %d %lld", in, out, n);
 
 #ifdef FREEBSD_SENDFILE
   if (n > 0) {
@@ -226,12 +226,12 @@ int32 Relayn(file_fd in, fd out, uint32 n) {
   return ntotread;
 }
 
-int32 Readline(fd in, void* buff, uint32 maxsize) {
-  int32 nread = 0;
-  int32 ntotread = 0;
+intlen Readline(fd in, void* buff, intlen maxsize) {
+  intlen nread = 0;
+  intlen ntotread = 0;
   int8* cbuff = buff;
   int8 c = 0;
-  log_printf("%d %u", in, maxsize);
+  logPrintf("%d %lld", in, maxsize);
   maxsize -= sizeof(int8);
   if (maxsize < 0)
     return ntotread;
@@ -276,16 +276,16 @@ int32 Readline(fd in, void* buff, uint32 maxsize) {
   return ntotread;
 }
 
-int32 Writeline(fd out, void* buff) {
-  int32 nwritten = 0;
-  int32 ntotwritten = 0;
-  int32 length = 0;
+intlen Writeline(fd out, void* buff) {
+  intlen nwritten = 0;
+  intlen ntotwritten = 0;
+  intlen length = 0;
 #ifdef NET_CR
   int8 pterm = '\r';
 #endif /* NET_CR */
   int8 term = '\n';
   int8* cbuff = buff;
-  log_printf("%d", out);
+  logPrintf("%d", out);
   for (; *cbuff && *cbuff != '\n' && *cbuff != '\r'; ++length, ++cbuff)
     ;
   nwritten = Writen(out, buff, length * sizeof(int8));
@@ -305,12 +305,12 @@ int32 Writeline(fd out, void* buff) {
   return ntotwritten;
 }
 
-int32 RecvFrom(fd in, void* buff, uint32 maxsize, char* ip, char* service) {
-  int32 nread = 0;
+intlen RecvFrom(fd in, void* buff, intlen maxsize, char* ip, char* service) {
+  intlen nread = 0;
   struct sockaddr caddr;
   uint32 caddrs = 0;
 
-  log_printf("%d %u", in, maxsize);
+  logPrintf("%d %lld", in, maxsize);
   nread = recvfrom(in, buff, maxsize, 0, (struct sockaddr*)&caddr, &caddrs);
   if (nread < 0)
     return NET_ERROR;
@@ -319,11 +319,11 @@ int32 RecvFrom(fd in, void* buff, uint32 maxsize, char* ip, char* service) {
   return nread;
 }
 
-int32 SendTo(fd out, void* buff, uint32 maxsize, char* ip, char* service) {
+intlen SendTo(fd out, void* buff, intlen maxsize, char* ip, char* service) {
   int32 nwritten = 0;
   struct addrinfo *results, *rp;
 
-  log_printf("%d %u", out, maxsize);
+  logPrintf("%d %lld", out, maxsize);
   results = getAddrResults(ip, service, 0, SOCK_DGRAM, IPPROTO_UDP);
   if (results == NULL)
     return NET_ERROR;
@@ -347,14 +347,14 @@ int32 SendTo(fd out, void* buff, uint32 maxsize, char* ip, char* service) {
 }
 
 int32 Socket(fd* in, int32 addrfamily, int32 socktype, int32 protocol) {
-  log_printf("%d %d %d", addrfamily, socktype, protocol);
+  logPrintf("%d %d %d", addrfamily, socktype, protocol);
   if ((*in = socket(addrfamily, socktype, protocol)) < 0)
     return NET_ERROR;
   return NET_OK;
 }
 
 int32 Close(fd* in) {
-  log_printf("%d", *in);
+  logPrintf("%d", *in);
   if(*in < 0)
     return NET_ERROR;
   CloseImpl(*in);
@@ -366,7 +366,7 @@ int32 Close(fd* in) {
 int32 Accept(fd* bindin, fd* acceptin, char* ip, char* service) {
   struct sockaddr caddr;
   uint32 caddrs = sizeof(caddr);
-  log_printf("%d", *bindin);
+  logPrintf("%d", *bindin);
 
   if (*bindin < 0) {
     return NET_ERROR;
@@ -386,7 +386,7 @@ static int32 ConnectImpl(fd* in,
                          int32 socktype,
                          int32 protocol) {
   struct addrinfo *results, *rp;
-  log_printf("%d %s %s %d %d", *in, ip, service, socktype, protocol);
+  logPrintf("%d %s %s %d %d", *in, ip, service, socktype, protocol);
 
   results = getAddrResults(ip, service, 0, socktype, protocol);
   if (results == NULL)
@@ -419,7 +419,7 @@ static int32 BindImpl(fd* bindin,
                       int32 socktype,
                       int32 protocol) {
   struct addrinfo *results, *rp;
-  log_printf("%d %s %s %d %d", *bindin, ip, service, socktype, protocol);
+  logPrintf("%d %s %s %d %d", *bindin, ip, service, socktype, protocol);
 
   results = getAddrResults(ip, service, AI_PASSIVE, socktype, protocol);
   if (results == NULL)
