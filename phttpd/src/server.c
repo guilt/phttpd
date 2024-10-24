@@ -528,7 +528,7 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   Writeline(*out, "Cache-Control: no-cache");
   Writeline(*out, "");
 
-  if (!head_only) Relayn(furl, *out, flen);
+  if (!head_only) Relayn(furl, *out, clen);
 
   Close(&furl);
 }
