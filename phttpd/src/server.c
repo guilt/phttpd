@@ -70,49 +70,49 @@
 
 static fd in;
 
-static void parseRequest(char buff[LINE_SIZE], int *http_method, char url[LINE_SIZE],
-                   int *http_version) {
+static void parseRequest(char lineBuffer[LINE_SIZE], int *httpMethod, char url[LINE_SIZE],
+                   int *httpVersion) {
   int i = 0, j = 0;
-  if (!buff || !http_method || !url || !http_version) return;
+  if (!lineBuffer || !httpMethod || !url || !httpVersion) return;
 
-  *http_method = HTTP_INVALID;
+  *httpMethod = HTTP_INVALID;
   *url = 0;
-  *http_version = HTTP_VERSION_INVALID;
+  *httpVersion = HTTP_VERSION_INVALID;
 
-  for (; buff[i] && isspace(buff[i]); ++i)
+  for (; lineBuffer[i] && isspace(lineBuffer[i]); ++i)
     ;
 
-  if (buff[i] == 'G' && buff[i + 1] == 'E' && buff[i + 2] == 'T') {
-    *http_method = HTTP_GET;
+  if (lineBuffer[i] == 'G' && lineBuffer[i + 1] == 'E' && lineBuffer[i + 2] == 'T') {
+    *httpMethod = HTTP_GET;
     i += 3;
   }
-  if (buff[i] == 'H' && buff[i + 1] == 'E' && buff[i + 2] == 'A' &&
-      buff[i + 2] == 'D') {
-    *http_method = HTTP_HEAD;
+  if (lineBuffer[i] == 'H' && lineBuffer[i + 1] == 'E' && lineBuffer[i + 2] == 'A' &&
+      lineBuffer[i + 2] == 'D') {
+    *httpMethod = HTTP_HEAD;
     i += 4;
   }
-  if (buff[i] && !isspace(buff[i])) *http_method = HTTP_INVALID;
+  if (lineBuffer[i] && !isspace(lineBuffer[i])) *httpMethod = HTTP_INVALID;
 
-  if (*http_method == HTTP_INVALID) return;
+  if (*httpMethod == HTTP_INVALID) return;
 
-  for (; buff[i] && isspace(buff[i]); ++i)
+  for (; lineBuffer[i] && isspace(lineBuffer[i]); ++i)
     ;
 
-  for (; buff[i] && !isspace(buff[i]); ++i) url[j++] = buff[i];
+  for (; lineBuffer[i] && !isspace(lineBuffer[i]); ++i) url[j++] = lineBuffer[i];
   url[j] = 0;
 
-  for (; buff[i] && isspace(buff[i]); ++i)
+  for (; lineBuffer[i] && isspace(lineBuffer[i]); ++i)
     ;
 
-  if (buff[i] == 'H' && buff[i + 1] == 'T' && buff[i + 2] == 'T' &&
-      buff[i + 3] == 'P') {
-    if (buff[i + 4] == '/') {
-      if (buff[i + 5] == '1' && buff[i + 6] == '.') {
-        if (!buff[i + 8] || isspace(buff[i + 8])) {
-          if (buff[i + 7] == '1') {
-            *http_version = HTTP_VERSION_1_1;
-          } else if (buff[i + 7] == '0') {
-            *http_version = HTTP_VERSION_1_0;
+  if (lineBuffer[i] == 'H' && lineBuffer[i + 1] == 'T' && lineBuffer[i + 2] == 'T' &&
+      lineBuffer[i + 3] == 'P') {
+    if (lineBuffer[i + 4] == '/') {
+      if (lineBuffer[i + 5] == '1' && lineBuffer[i + 6] == '.') {
+        if (!lineBuffer[i + 8] || isspace(lineBuffer[i + 8])) {
+          if (lineBuffer[i + 7] == '1') {
+            *httpVersion = HTTP_VERSION_1_1;
+          } else if (lineBuffer[i + 7] == '0') {
+            *httpVersion = HTTP_VERSION_1_0;
           }
         }
       }
@@ -120,74 +120,110 @@ static void parseRequest(char buff[LINE_SIZE], int *http_method, char url[LINE_S
   }
 }
 
-static void parseHeader(char buff[LINE_SIZE], char header[LINE_SIZE],
+static void parseHeader(char lineBuffer[LINE_SIZE], char header[LINE_SIZE],
                   char value[LINE_SIZE]) {
   int i = 0, j = 0, k = 0;
-  if (!buff || !header || !value) return;
+  if (!lineBuffer || !header || !value) return;
 
   *header = 0;
   *value = 0;
 
-  for (; buff[i] && isspace(buff[i]); ++i)
+  for (; lineBuffer[i] && isspace(lineBuffer[i]); ++i)
     ;
 
-  for (; buff[i] && buff[i] != ':' && !isspace(buff[i]); ++i)
-    header[j++] = buff[i];
+  for (; lineBuffer[i] && lineBuffer[i] != ':' && !isspace(lineBuffer[i]); ++i)
+    header[j++] = lineBuffer[i];
   header[j] = 0;
-  if (buff[i] == ':') ++i;
+  if (lineBuffer[i] == ':') ++i;
 
-  for (; buff[i] && isspace(buff[i]); ++i)
+  for (; lineBuffer[i] && isspace(lineBuffer[i]); ++i)
     ;
 
-  for (; buff[i]; ++i) value[k++] = buff[i];
+  for (; lineBuffer[i]; ++i) value[k++] = lineBuffer[i];
   value[k] = 0;
 }
 
 static char *getContentType(char file[LINE_SIZE]) {
   int index = -1;
   int i = 0;
-#define FILE_TYPES 40
-  static char file_types[FILE_TYPES * 2][MISC_SIZE] = {
+#define FILE_TYPES 70
+  static char fileTypes[FILE_TYPES * 2][MISC_SIZE] = {
+
+      "bat",  "application/x-bat",
+      "7z",   "application/x-7z-compressed",
+      "bz2",  "application/x-bzip2",
       "exe",  "application/octet-stream",
-      "sh",   "text/x-script.sh",
+      "gz",   "application/x-gzip",
+      "json", "application/json",
       "ps",   "application/postscript",
       "pdf",  "application/pdf",
+      "rar",  "application/vnd.rar",
+      "rm",   "application/vnd.rn-realmedia",
       "swf",  "application/x-shockwave-flash",
-      "zip",  "application/zip",
       "tar",  "application/x-tar",
-      "gz",   "application/x-gzip",
-      "bz2",  "application/x-bzip2",
-      "snd",  "audio/basic",
+      "xml",  "application/xml",
+      "zip",  "application/zip",
+
       "wav",  "audio/x-wav",
       "mp3",  "audio/mpeg3",
-      "rm",   "application/vnd.rn-realmedia",
-      "ram",  "audio/vnd.rn-realaudio",
-      "rv",   "video/vnd.rn-realvideo",
-      "rpm",  "audio/x-pn-realaudio-plugin",
+      "m4a",  "audio/mp4",
       "mp4",  "video/mp4",
+      "opus", "audio/ogg",
+      "ram",  "audio/vnd.rn-realaudio",
+      "rpm",  "audio/x-pn-realaudio-plugin",
+      "snd",  "audio/basic",
+
       "avi",  "video/x-msvideo",
-      "wmv",  "video/x-ms-wmv",
-      "mov",  "video/quicktime",
       "flv",  "video/flv",
+      "mkv",  "video/x-matroska",
+      "mov",  "video/quicktime",
+      "mp4",  "video/mp4",
+      "rv",   "video/vnd.rn-realvideo",
+      "wmv",  "video/x-ms-wmv",
+      "webm", "video/webm",
+
+      "avif", "image/avif",
+      "bmp",  "image/bmp",
       "gif",  "image/gif",
+      "ico",  "image/vnd.microsoft.icon",
       "jpg",  "image/jpeg",
       "jpeg", "image/jpeg",
       "png",  "image/png",
+      "svg",  "image/svg+xml",
       "tif",  "image/tiff",
       "tiff", "image/tiff",
-      "htm",  "text/html",
-      "html", "text/html",
-      "js",   "text/javascript",
-      "css",  "text/css",
+      "webp", "image/webp",
+
+      "bash", "text/x-shellscript",
       "c",    "text/plain",
-      "s",    "text/plain",
       "cc",   "text/plain",
       "cpp",  "text/plain",
-      "java", "text/plain",
+      "css",  "text/css",
+      "cu",   "text/plain",
       "h",    "text/plain",
+      "hip",  "text/plain",
+      "hpp",  "text/plain",
+      "htm",  "text/html",
+      "html", "text/html",
+      "java", "text/plain",
+      "js",   "text/javascript",
+      "md",   "text/markdown",
+      "go",   "text/plain",
+      "rs",   "text/plain",
+      "s",    "text/plain",
       "pl",   "text/plain",
       "pm",   "text/plain",
+      "ps1",  "text/plain",
+      "py",   "text/plain",
       "txt",  "text/plain",
+      "sh",   "text/x-shellscript",
+      "zsh",  "text/x-shellscript",
+
+      "ttf",  "font/ttf",
+      "eot",  "font/eot",
+      "otf",  "font/otf",
+      "woff", "font/woff",
+      "woff2","font/woff2",
   };
   while (i < LINE_SIZE && file[i]) {
     if (file[i] == '.') index = i;
@@ -197,56 +233,56 @@ static char *getContentType(char file[LINE_SIZE]) {
     ++index;
     int f = 0, kf = 0;
     for (; f < FILE_TYPES; ++f, kf += 2) {
-      if (!strcasecmp(file + index, file_types[kf])) return file_types[kf + 1];
+      if (!strcasecmp(file + index, fileTypes[kf])) return fileTypes[kf + 1];
     }
   }
   return "content/unknown";
 }
 
 static void getRangeValues(char value[LINE_SIZE], intlen *start, intlen *end) {
-  char *vptr = value;
+  char *valuePtr = value;
   *start = -1;
   *end = -1;
-  if (strncmp(vptr, "bytes", 5)) return;
-  vptr += 5;
-  if (!isdigit(*vptr)) ++vptr;
-  if (!*vptr) return;
-  if (!sscanf(vptr, "%lld", start)) return;
-  for (; *vptr && *vptr != '-'; ++vptr)
+  if (strncmp(valuePtr, "bytes", 5)) return;
+  valuePtr += 5;
+  if (!isdigit(*valuePtr)) ++valuePtr;
+  if (!*valuePtr) return;
+  if (!sscanf(valuePtr, "%lld", start)) return;
+  for (; *valuePtr && *valuePtr != '-'; ++valuePtr)
     ;
-  if (!*vptr) return;
-  ++vptr;
-  if (!*vptr) return;
-  sscanf(vptr, "%lld", end);
+  if (!*valuePtr) return;
+  ++valuePtr;
+  if (!*valuePtr) return;
+  sscanf(valuePtr, "%lld", end);
 }
 
 static void mapURL(char url[LINE_SIZE],
 #ifdef VHOST
              char vhost[LINE_SIZE],
 #endif /* VHOST */
-             char file[LINE_SIZE], int *send_redir) {
+             char file[LINE_SIZE], int *sendRedir) {
   int a, b, i = 0, j = 0;
-  int reindex = 0, bdlen = 0, dflen = 0;
-  char c, *bdptr = BASE_DIR, *dfptr = DEFAULT_FILE;
+  int reIndex = 0, baseDirLength = 0, dataFileLength = 0;
+  char c, *baseDirPtr = BASE_DIR, *dataFilePtr = DEFAULT_FILE;
 #ifdef VHOST
   int k = 0;
-  char *dvptr = DEFAULT_VHOST;
+  char *dvaluePtr = DEFAULT_VHOST;
 #endif /* VHOST */
 
-  if (!url || !*url || !file || !send_redir) return;
+  if (!url || !*url || !file || !sendRedir) return;
 #ifdef VHOST
   if (!vhost) return;
 #endif /* VHOST */
-  *send_redir = 0;
+  *sendRedir = 0;
 
-  for (; bdptr[bdlen] && bdlen < (LINE_SIZE - 1); ++bdlen)
-    file[bdlen] = bdptr[bdlen];
-  if (bdlen < (LINE_SIZE - 1) && file[bdlen - 1] != '/') {
-    file[bdlen++] = '/';
-    file[bdlen] = 0;
+  for (; baseDirPtr[baseDirLength] && baseDirLength < (LINE_SIZE - 1); ++baseDirLength)
+    file[baseDirLength] = baseDirPtr[baseDirLength];
+  if (baseDirLength < (LINE_SIZE - 1) && file[baseDirLength - 1] != '/') {
+    file[baseDirLength++] = '/';
+    file[baseDirLength] = 0;
   }
 #ifdef VHOST
-  if (!*vhost) strncpy(vhost, dvptr, LINE_SIZE);
+  if (!*vhost) strncpy(vhost, dvaluePtr, LINE_SIZE);
   c = vhost[k];
   if (c == '%' && isxdigit(a = vhost[k + 1]) && isxdigit(b = vhost[k + 2])) {
     k += 3;
@@ -263,21 +299,21 @@ static void mapURL(char url[LINE_SIZE],
     c = (a << 4) + b;
   } else
     ++k;
-  for (; k < LINE_SIZE && bdlen < (LINE_SIZE - 1) && c && c != ':';) {
+  for (; k < LINE_SIZE && baseDirLength < (LINE_SIZE - 1) && c && c != ':';) {
     if (c == '/') {
-      if (file[bdlen] == '.' || file[bdlen] == '/')
+      if (file[baseDirLength] == '.' || file[baseDirLength] == '/')
         ;
       else
-        file[bdlen] = '/';
+        file[baseDirLength] = '/';
     } else if (c == '.') {
-      if (file[bdlen] == '.' || file[bdlen] == '/')
+      if (file[baseDirLength] == '.' || file[baseDirLength] == '/')
         ;
       else
-        file[bdlen] = '.';
+        file[baseDirLength] = '.';
     } else {
-      if (file[bdlen] == '.' || file[bdlen] == '/') ++bdlen;
-      file[bdlen++] = c;
-      file[bdlen] = 0;
+      if (file[baseDirLength] == '.' || file[baseDirLength] == '/') ++baseDirLength;
+      file[baseDirLength++] = c;
+      file[baseDirLength] = 0;
     }
     c = vhost[k];
     if (c == '%' && isxdigit(a = vhost[k + 1]) && isxdigit(b = vhost[k + 2])) {
@@ -296,13 +332,13 @@ static void mapURL(char url[LINE_SIZE],
     } else
       ++k;
   }
-  if (bdlen < (LINE_SIZE - 1) && file[bdlen - 1] != '/') {
-    file[bdlen++] = '/';
-    file[bdlen] = 0;
+  if (baseDirLength < (LINE_SIZE - 1) && file[baseDirLength - 1] != '/') {
+    file[baseDirLength++] = '/';
+    file[baseDirLength] = 0;
   }
 #endif /* VHOST */
 
-  j = bdlen - 1;
+  j = baseDirLength - 1;
 
   c = url[i];
   if (c == '%' && isxdigit(a = url[i + 1]) && isxdigit(b = url[i + 2])) {
@@ -321,7 +357,7 @@ static void mapURL(char url[LINE_SIZE],
   } else
     ++i;
   for (; i < LINE_SIZE && j < (LINE_SIZE - 1) && c && c != '?';) {
-    reindex = i;
+    reIndex = i;
     if (c == '/') {
       if (file[j] == '.' || file[j] == '/')
         ;
@@ -358,16 +394,16 @@ static void mapURL(char url[LINE_SIZE],
   {
     DIR *dir = opendir(file);
     if (dir) {
-      if (file[j - 1] == '/' || j == bdlen) {
-        for (; dfptr[dflen]; ++dflen) {
-          if (j < (LINE_SIZE - 1)) file[j++] = dfptr[dflen];
+      if (file[j - 1] == '/' || j == baseDirLength) {
+        for (; dataFilePtr[dataFileLength]; ++dataFileLength) {
+          if (j < (LINE_SIZE - 1)) file[j++] = dataFilePtr[dataFileLength];
         }
         file[j] = 0;
       } else {
-        *send_redir = 1;
-        if (reindex < (LINE_SIZE - 1)) {
-          url[reindex++] = '/';
-          url[reindex] = 0;
+        *sendRedir = 1;
+        if (reIndex < (LINE_SIZE - 1)) {
+          url[reIndex++] = '/';
+          url[reIndex] = 0;
         }
       }
     }
@@ -386,25 +422,25 @@ static void serveInvalidMethod(fd *out) {
   Writeline(*out, "");
 }
 
-static void serveRedirect(fd *out, char url[LINE_SIZE], int http_version) {
-  char buff[LINE_SIZE];
-  snprintf(buff, LINE_SIZE, "Location: %s", url);
-  if (http_version == HTTP_VERSION_1_0) {
+static void serveRedirect(fd *out, char url[LINE_SIZE], int httpVersion) {
+  char lineBuffer[LINE_SIZE];
+  snprintf(lineBuffer, LINE_SIZE, "Location: %s", url);
+  if (httpVersion == HTTP_VERSION_1_0) {
     Writeline(*out, "HTTP/1.0 301 Moved Permanently");
     Writeline(*out, "Connection: close");
-  } else if (http_version == HTTP_VERSION_1_1) {
+  } else if (httpVersion == HTTP_VERSION_1_1) {
     Writeline(*out, "HTTP/1.1 301 Moved Permanently");
     Writeline(*out, "Content-Length: 0");
   }
-  Writeline(*out, buff);
+  Writeline(*out, lineBuffer);
   Writeline(*out, "");
 }
 
-static void serveNotFound(fd *out, int http_version) {
-  if (http_version == HTTP_VERSION_1_0) {
+static void serveNotFound(fd *out, int httpVersion) {
+  if (httpVersion == HTTP_VERSION_1_0) {
     Writeline(*out, "HTTP/1.0 404 Not Found");
     Writeline(*out, "Connection: close");
-  } else if (http_version == HTTP_VERSION_1_1) {
+  } else if (httpVersion == HTTP_VERSION_1_1) {
     Writeline(*out, "HTTP/1.1 404 Not Found");
     Writeline(*out, "Content-Length: 0");
   }
@@ -413,25 +449,25 @@ static void serveNotFound(fd *out, int http_version) {
 
 static void serveRequest(fd *out, char url[LINE_SIZE],
 #ifdef VHOST
-                   char vhost[LINE_SIZE],
+  char vhost[LINE_SIZE],
 #endif /* VHOST */
-                   intlen start, intlen end, int http_version, int head_only) {
-  int send_redir = 0;
+  intlen start, intlen end, int httpVersion, int headOnly) {
+  int sendRedir = 0;
   char filename[LINE_SIZE];
-  char buff[LINE_SIZE];
+  char lineBuffer[LINE_SIZE];
   file_fd furl = -1;
-  intlen flen = -1, clen = -1;
-  int partial = 0, partial_unsatisfiable = 0;
+  intlen fileLength = -1, responseLength = -1;
+  int partial = 0, partialUnsatisfiable = 0;
 
 #ifdef VHOST
-  mapURL(url, vhost, filename, &send_redir);
+  mapURL(url, vhost, filename, &sendRedir);
 #else
-  mapURL(url, filename, &send_redir);
+  mapURL(url, filename, &sendRedir);
 #endif /* VHOST */
   logPrintf("URL: %s -> File: %s", url, filename);
 
-  if (send_redir) {
-    serveRedirect(out, url, http_version);
+  if (sendRedir) {
+    serveRedirect(out, url, httpVersion);
     return;
   }
 
@@ -441,41 +477,41 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   furl = open(filename, O_RDONLY);
 #endif /* WINDOWS */
   if (furl < 0) {
-    serveNotFound(out, http_version);
+    serveNotFound(out, httpVersion);
     return;
   }
 
-  flen = lseek(furl, 0, SEEK_END);
+  fileLength = lseek(furl, 0, SEEK_END);
   lseek(furl, 0, SEEK_SET);
-  clen = flen;
+  responseLength = fileLength;
 
   logPrintf("Start: %lld End: %lld", start, end);
   if (start >= 0) {
     partial = 1;
 
-    if (start >= flen) {
-      partial_unsatisfiable = 1;
+    if (start >= fileLength) {
+      partialUnsatisfiable = 1;
     } else if (end < 0) {
-      end = flen - 1;
-    } else if (end >= start && end < flen) {
+      end = fileLength - 1;
+    } else if (end >= start && end < fileLength) {
     }
 
-    if(!partial_unsatisfiable) {
+    if(!partialUnsatisfiable) {
       lseek(furl, start, SEEK_SET);
-      clen = (end - start + 1);
+      responseLength = (end - start + 1);
     }
   } else if (end >= 0) {
     partial = 1;
 
-    start = flen - end;
-    end = flen - 1;
+    start = fileLength - end;
+    end = fileLength - 1;
 
     lseek(furl, start, SEEK_SET);
-    clen = (end - start + 1);
+    responseLength = (end - start + 1);
   }
 
-  if(partial_unsatisfiable) {
-      logPrintf("Unsatifiable, Length: %lld", flen);
+  if(partialUnsatisfiable) {
+      logPrintf("Unsatifiable, Length: %lld", fileLength);
       Writeline(*out, "HTTP/1.0 416 Range not Satisfiable");
       Writeline(*out, "Connection: close");
       Writeline(*out, "");
@@ -485,85 +521,85 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   }
 
   if(partial) {
-      if (http_version == HTTP_VERSION_1_0) {
+      if (httpVersion == HTTP_VERSION_1_0) {
         Writeline(*out, "HTTP/1.0 206 Partial Content");
-      } else if (http_version == HTTP_VERSION_1_1) {
+      } else if (httpVersion == HTTP_VERSION_1_1) {
         Writeline(*out, "HTTP/1.1 206 Partial Content");
       }
   } else {
-      if (http_version == HTTP_VERSION_1_0) {
+      if (httpVersion == HTTP_VERSION_1_0) {
         Writeline(*out, "HTTP/1.0 200 OK");
-      } else if (http_version == HTTP_VERSION_1_1) {
+      } else if (httpVersion == HTTP_VERSION_1_1) {
         Writeline(*out, "HTTP/1.1 200 OK");
       }
   }
 
-  if (http_version == HTTP_VERSION_1_0) {
+  if (httpVersion == HTTP_VERSION_1_0) {
     Writeline(*out, "Connection: close");
-  } else if (http_version == HTTP_VERSION_1_1) {
+  } else if (httpVersion == HTTP_VERSION_1_1) {
     Writeline(*out, "Connection: keep-alive");
   }
 
   {
-  logPrintf("Content-Length: %lld", clen);
-  snprintf(buff, LINE_SIZE, "Content-Length: %lld", clen);
-  Writeline(*out, buff);
+  logPrintf("Content-Length: %lld", responseLength);
+  snprintf(lineBuffer, LINE_SIZE, "Content-Length: %lld", responseLength);
+  Writeline(*out, lineBuffer);
   }
 
   if (partial) {
-    logPrintf("Content-Range: bytes %lld-%lld/%lld", start, end, flen);
-    snprintf(buff, LINE_SIZE, "Content-Range: bytes %lld-%lld/%lld", start, end,
-             flen);
-    Writeline(*out, buff);
+    logPrintf("Content-Range: bytes %lld-%lld/%lld", start, end, fileLength);
+    snprintf(lineBuffer, LINE_SIZE, "Content-Range: bytes %lld-%lld/%lld", start, end,
+             fileLength);
+    Writeline(*out, lineBuffer);
     Writeline(*out, "Accept-Ranges: bytes");
   }
 
   {
     char *ctype = getContentType(filename);
     logPrintf("Content-Type: %s", ctype);
-    snprintf(buff, LINE_SIZE, "Content-Type: %s", ctype);
-    Writeline(*out, buff);
+    snprintf(lineBuffer, LINE_SIZE, "Content-Type: %s", ctype);
+    Writeline(*out, lineBuffer);
   }
 
   Writeline(*out, "Cache-Control: no-cache");
   Writeline(*out, "");
 
-  if (!head_only) Relayn(furl, *out, clen);
+  if (!headOnly) Relayn(furl, *out, responseLength);
 
   Close(&furl);
 }
 
 static int handleMe(fd *accept) {
-  int persist_done;
-  char buff[LINE_SIZE], url[LINE_SIZE], header[LINE_SIZE], value[LINE_SIZE];
+  int persistDone;
+  char lineBuffer[LINE_SIZE], url[LINE_SIZE], header[LINE_SIZE], value[LINE_SIZE];
 #ifdef VHOST
   char vhost[LINE_SIZE];
 #endif /* VHOST */
-  int http_method, http_version;
+  int httpMethod, httpVersion;
   intlen start = -1, end = -1;
 
   do {
-    persist_done = 1;
+    persistDone = 1;
 #ifdef VHOST
     *vhost = 0;
 #endif /*VHOST */
 
-    *buff = 0;
-    Readline(*accept, buff, LINE_SIZE);
+    *lineBuffer = 0;
+    Readline(*accept, lineBuffer, LINE_SIZE);
 
-    if (!*buff) return NET_ERROR;
-    parseRequest(buff, &http_method, url, &http_version);
+    if (!*lineBuffer) return NET_ERROR;
+    parseRequest(lineBuffer, &httpMethod, url, &httpVersion);
 
-    *buff = 0;
-    Readline(*accept, buff, LINE_SIZE);
+    *lineBuffer = 0;
+    Readline(*accept, lineBuffer, LINE_SIZE);
 
-    while (*buff) {
-      parseHeader(buff, header, value);
+    while (*lineBuffer) {
+      parseHeader(lineBuffer, header, value);
       logPrintf("[%s]: %s", header, value);
 
       if (!strcmp(header, "Connection"))
         if (!strcmp(value, "close"))
-          http_version = HTTP_VERSION_1_0; /* Force compatibility. */
+          httpVersion = HTTP_VERSION_1_0; /* Force compatibility. */
 
       if (!strcmp(header, "Range")) getRangeValues(value, &start, &end);
 
@@ -572,37 +608,37 @@ static int handleMe(fd *accept) {
         strncpy(vhost, value, LINE_SIZE * sizeof(char));
 #endif /* VHOST */
 
-      *buff = 0;
-      Readline(*accept, buff, LINE_SIZE);
+      *lineBuffer = 0;
+      Readline(*accept, lineBuffer, LINE_SIZE);
     }
 
-    if (http_version == HTTP_VERSION_1_0) persist_done = 0;
+    if (httpVersion == HTTP_VERSION_1_0) persistDone = 0;
 
-    if (http_method == HTTP_INVALID) {
+    if (httpMethod == HTTP_INVALID) {
       serveInvalidMethod(accept);
-      persist_done = 0;
-    } else if (http_version == HTTP_VERSION_INVALID) {
+      persistDone = 0;
+    } else if (httpVersion == HTTP_VERSION_INVALID) {
       serveInvalidVersion(accept);
-      persist_done = 0;
-    } else if (http_method == HTTP_GET) {
+      persistDone = 0;
+    } else if (httpMethod == HTTP_GET) {
 #ifdef VHOST
-      serveRequest(accept, url, vhost, start, end, http_version, 0);
+      serveRequest(accept, url, vhost, start, end, httpVersion, 0);
 #else
-      serveRequest(accept, url, start, end, http_version, 0);
+      serveRequest(accept, url, start, end, httpVersion, 0);
 #endif /* VHOST */
-    } else if (http_method == HTTP_HEAD) {
+    } else if (httpMethod == HTTP_HEAD) {
 #ifdef VHOST
-      serveRequest(accept, url, vhost, start, end, http_version, 1);
+      serveRequest(accept, url, vhost, start, end, httpVersion, 1);
 #else
-      serveRequest(accept, url, start, end, http_version, 1);
+      serveRequest(accept, url, start, end, httpVersion, 1);
 #endif /* VHOST */
     }
-  } while (persist_done);
+  } while (persistDone);
 
   return NET_OK;
 }
 
-void interrupt_handler(int sig) {
+void interruptHandler(int sig) {
   logPrintf("Interrupted ...");
   Close(&in);
   logPrintf("Bind Closed.");
@@ -634,31 +670,31 @@ int main() {
     return 0;
   }
   {
-    fd to_close;
-    to_close = STDIN_FILENO;
-    Close(&to_close);
-    to_close = STDOUT_FILENO;
-    Close(&to_close);
-    to_close = STDERR_FILENO;
-    Close(&to_close);
+    fd toClose;
+    toClose = STDIN_FILENO;
+    Close(&toClose);
+    toClose = STDOUT_FILENO;
+    Close(&toClose);
+    toClose = STDERR_FILENO;
+    Close(&toClose);
   }
 #endif /* DEBUG */
 #endif /* FORKED */
 
 #ifdef FORKED
   signal(SIGCHLD, SIG_IGN);
-  signal(SIGHUP, interrupt_handler);
+  signal(SIGHUP, interruptHandler);
 #endif /* FORKED */
-  signal(SIGINT, interrupt_handler);
-  signal(SIGTERM, interrupt_handler);
+  signal(SIGINT, interruptHandler);
+  signal(SIGTERM, interruptHandler);
 
   srand(time(NULL));
 
   {
-    char buff[LINE_SIZE];
-    snprintf(buff, LINE_SIZE, "%u", SERV_PORT);
+    char lineBuffer[LINE_SIZE];
+    snprintf(lineBuffer, LINE_SIZE, "%u", SERV_PORT);
 
-    if (Bind(&in, SERV_IP, buff) < 0) {
+    if (Bind(&in, SERV_IP, lineBuffer) < 0) {
       logPrintf("Bind Error");
       return -1;
     }

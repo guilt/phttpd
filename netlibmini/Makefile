@@ -1,6 +1,6 @@
-CC := gcc
-AR := ar
-RM := rm -f
+CC ?= gcc
+AR ?= ar
+RM ?= rm -f
 MKDIR := mkdir -p
 CFLAGS += -O2 -Wall $(DISTCFLAGS)
 

@@ -24,12 +24,19 @@ $ make -C phttpd
 
 That's it. Now to launch the server, execute `phttpd_s`. If you are
 running on a privileged port, you will need to run as root. With
-default build settings, it runs on port **8080**. Unset `SERV_PORT`
-in `Makefile` to make it build on port **80**.
+default build settings, it runs on port **8080**. 
 
 ```shell
 $ ./phttpd/phttpd_s
 ```
+
+And then you should be able to test it like so:
+
+```shell
+$ curl --http1.0 localhost:8080
+```
+
+Unset `SERV_PORT` in `Makefile` to make it build it to run on port **80**.
 
 A sample `rc.phttpd` is provided in `etc/` for those who wish to run the server
 at init / startup.
