@@ -1,0 +1,39 @@
+name: make-alpine
+on: [push]
+concurrency: ci-alpine-${{ github.ref }}
+
+jobs:
+
+  alpine:
+    runs-on: ubuntu-latest
+
+    name: Alpine (musl)
+
+    defaults:
+      run:
+        shell: alpine.sh {0}
+
+    steps:
+      - name: get CPU information
+        shell: bash
+        run: |
+          cat /proc/cpuinfo
+
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: install dependencies
+        uses: jirutka/setup-alpine@v1
+        with:
+          packages: >
+            coreutils
+            build-base
+            git
+            pkgconfig
+            libtool
+            cmake
+
+      - name: build
+        run: |
+          make -C netlibmini
+          make -C phttpd

@@ -1,7 +1,8 @@
 CC ?= gcc
 AR ?= ar
 RM ?= rm -f
-MKDIR := mkdir -p
+MKDIR ?= mkdir -p
+
 CFLAGS += -O2 -Wall $(DISTCFLAGS)
 
 ifdef DEBUG

@@ -1,0 +1,45 @@
+name: make-macos
+on: [push]
+concurrency: ci-macos-${{ github.ref }}
+
+jobs:
+
+  macos:
+    runs-on: ${{ matrix.os }}
+
+    name: ${{ matrix.os }} Qt${{ matrix.qt }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os: [macos-15, macos-14, macos-13]
+        compiler: [clang]
+        include:
+          - compiler: clang
+            cc: "clang"
+            cxx: "clang++"
+
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: install dependencies
+        timeout-minutes: 75
+        run: |
+          brew update
+          brew install pkg-config libtool cmake
+          eval "$(/usr/libexec/path_helper)"
+          HOMEBREW_PREFIX=$(brew --prefix)
+          echo "HOMEBREW_PREFIX=$(brew --prefix)" >> $GITHUB_ENV
+          echo "/Library/TeX/texbin" >> $GITHUB_PATH
+          echo "${HOMEBREW_PREFIX}/opt/bison/bin" >> $GITHUB_PATH
+
+      - name: build
+        run: |
+          make -C netlibmini
+          make -C phttpd

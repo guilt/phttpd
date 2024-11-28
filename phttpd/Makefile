@@ -1,7 +1,9 @@
 CC ?= gcc
 RM ?= rm -f
+
 CFLAGS += -O2 -Wall $(DISTCFLAGS)
 CFLAGS += -DSERV_PORT=8080
+
 VHOST_BASE_DIR ?= "./vhosts"
 BASE_DIR ?= "./htdocs"
 

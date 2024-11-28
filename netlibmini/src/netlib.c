@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #ifdef WINDOWS
+#include <io.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #endif /* WINDOWS */
@@ -34,6 +35,9 @@
 #endif /* DEBUG */
 
 #ifdef WINDOWS
+
+#define addr_t int32
+
 #define MIN_API 2
 #define MAX_API 2
 
@@ -42,12 +46,17 @@
 #define CloseImpl(f) closesocket(f)
 #define FileRead read
 #define FileWrite write
+
 #else
+
+#define addr_t uint32
+
 #define Read read
 #define Write write
 #define CloseImpl close
 #define FileRead read
 #define FileWrite write
+
 #endif /* WINDOWS */
 
 #define READ_BUFF_SIZE 4096
@@ -308,7 +317,7 @@ intlen Writeline(fd out, void* buff) {
 intlen RecvFrom(fd in, void* buff, intlen maxsize, char* ip, char* service) {
   intlen nread = 0;
   struct sockaddr caddr;
-  uint32 caddrs = 0;
+  addr_t caddrs = 0;
 
   logPrintf("%d %lld", in, maxsize);
   nread = recvfrom(in, buff, maxsize, 0, (struct sockaddr*)&caddr, &caddrs);
@@ -365,7 +374,7 @@ int32 Close(fd* in) {
 
 int32 Accept(fd* bindin, fd* acceptin, char* ip, char* service) {
   struct sockaddr caddr;
-  uint32 caddrs = sizeof(caddr);
+  addr_t caddrs = sizeof(caddr);
   logPrintf("%d", *bindin);
 
   if (*bindin < 0) {

@@ -16,7 +16,17 @@
 #endif /* UNIX */
 
 #ifdef WINDOWS
-#define strcasecmp stricmp
+
+#define strCaseCmp stricmp
+#define prInt "%I64d"
+#define scanIntLength(srcString, value) sscanf(srcString, prInt, value)
+
+#else
+
+#define strCaseCmp strcasecmp
+#define prInt "%lld"
+#define scanIntLength(srcString, value) sscanf(srcString, prInt, value)
+
 #endif /* WINDOWS */
 
 #ifdef DEBUG
@@ -233,7 +243,7 @@ static char *getContentType(char file[LINE_SIZE]) {
     ++index;
     int f = 0, kf = 0;
     for (; f < FILE_TYPES; ++f, kf += 2) {
-      if (!strcasecmp(file + index, fileTypes[kf])) return fileTypes[kf + 1];
+      if (!strCaseCmp(file + index, fileTypes[kf])) return fileTypes[kf + 1];
     }
   }
   return "content/unknown";
@@ -247,13 +257,13 @@ static void getRangeValues(char value[LINE_SIZE], intlen *start, intlen *end) {
   valuePtr += 5;
   if (!isdigit(*valuePtr)) ++valuePtr;
   if (!*valuePtr) return;
-  if (!sscanf(valuePtr, "%lld", start)) return;
+  if (!scanIntLength(valuePtr, start)) return;
   for (; *valuePtr && *valuePtr != '-'; ++valuePtr)
     ;
   if (!*valuePtr) return;
   ++valuePtr;
   if (!*valuePtr) return;
-  sscanf(valuePtr, "%lld", end);
+  if (!scanIntLength(valuePtr, end)) return;
 }
 
 static void mapURL(char url[LINE_SIZE],
@@ -485,7 +495,7 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   lseek(furl, 0, SEEK_SET);
   responseLength = fileLength;
 
-  logPrintf("Start: %lld End: %lld", start, end);
+  logPrintf("Start: " prInt " End: " prInt, start, end);
   if (start >= 0) {
     partial = 1;
 
@@ -511,7 +521,7 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   }
 
   if(partialUnsatisfiable) {
-      logPrintf("Unsatifiable, Length: %lld", fileLength);
+      logPrintf("Unsatifiable, Length: " prInt, fileLength);
       Writeline(*out, "HTTP/1.0 416 Range not Satisfiable");
       Writeline(*out, "Connection: close");
       Writeline(*out, "");
@@ -541,15 +551,14 @@ static void serveRequest(fd *out, char url[LINE_SIZE],
   }
 
   {
-  logPrintf("Content-Length: %lld", responseLength);
-  snprintf(lineBuffer, LINE_SIZE, "Content-Length: %lld", responseLength);
+  logPrintf("Content-Length: " prInt, responseLength);
+  snprintf(lineBuffer, LINE_SIZE, "Content-Length: " prInt, responseLength);
   Writeline(*out, lineBuffer);
   }
 
   if (partial) {
-    logPrintf("Content-Range: bytes %lld-%lld/%lld", start, end, fileLength);
-    snprintf(lineBuffer, LINE_SIZE, "Content-Range: bytes %lld-%lld/%lld", start, end,
-             fileLength);
+    logPrintf("Content-Range: bytes "prInt "-" prInt "/" prInt, start, end, fileLength);
+    snprintf(lineBuffer, LINE_SIZE, "Content-Range: bytes " prInt "-" prInt "/" prInt, start, end, fileLength);
     Writeline(*out, lineBuffer);
     Writeline(*out, "Accept-Ranges: bytes");
   }

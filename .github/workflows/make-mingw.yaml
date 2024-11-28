@@ -1,0 +1,66 @@
+name: make-mingw
+on: [push]
+concurrency: ci-mingw-${{ github.ref }}
+
+jobs:
+
+  mingw:
+    runs-on: ${{ matrix.os }}
+
+    name: mingw-w64 ${{ matrix.msystem }}
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os: [windows-latest]
+        msystem: [MINGW64]
+        include:
+          - msystem: MINGW64
+            mingw-prefix: mingw64
+            target-prefix: mingw-w64-x86_64
+            cc: gcc
+            cxx: g++
+            f77: gfortran
+            extra-config-flags: ""
+            ccache-max: 0.9G
+            allow-error: false
+
+    env:
+      CC:   ${{ matrix.cc }}
+      CXX:  ${{ matrix.cxx }}
+      F77:  ${{ matrix.f77 }}
+
+    steps:
+      - name: get CPU information
+        shell: pwsh
+        run : |
+          Get-CIMInstance -Class Win32_Processor | Select-Object -Property Name
+
+      - name: install MSYS2 build environment
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          release: false
+
+          install: >-
+            base-devel
+            ${{ matrix.target-prefix }}-cc
+            git
+            pkg-config
+            libtool
+            ${{ matrix.target-prefix }}-cmake
+
+          msystem: ${{ matrix.msystem }}
+
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          make -C netlibmini
+          make -C phttpd
